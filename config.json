@@ -1,0 +1,23 @@
+{
+  "Name": "test",
+  "processes": [
+    {
+      "id": 1,
+      "name": "test1",
+      "myHandler": {
+        "name": "webhookCallbackHandler",
+        "url": "\/url\/webhook",
+        "method": ["get","put"]
+      }
+    },
+    {
+      "id": 2,
+      "name": "test2",
+      "myHandler": {
+        "name": "webhookCallbackHandler2",
+        "url": "\/url\/webhook\/2",
+        "method": ["get"]
+      }
+    }
+  ]
+}
