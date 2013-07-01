@@ -8,8 +8,8 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-
 	"os"
+	"sync"
 	"time"
 )
 
@@ -52,25 +52,33 @@ import (
 
 // support queuing via channels
 
-var VERSION float32 = 1.1
+var VERSION float32 = 0.001
+
+type MySingleton struct {
+}
+
+var _init_ctx sync.Once
+var _instance *statsd.Client
+
+func getStatsdClient() *statsd.Client {
+	_init_ctx.Do(func() {
+		client, err := statsd.Dial("localhost:8125", "runny")
+		// handle any errors
+		if err != nil {
+			log.Fatal(err)
+		} else {
+			_instance = client
+		}
+
+	})
+	return _instance
+}
 
 func main() {
 	startupBegan := time.Now()
 	// first create a client
-	client, err := statsd.Dial("127.0.0.1:8125", "test-client")
-	// handle any errors
-	if err != nil {
-		log.Fatal(err)
-	}
 	// make sure to clean up
-	defer client.Close()
-
-	// Send a stat
-	err = client.Inc("stat1", 42, 1.0)
-	// handle any errors
-	if err != nil {
-		log.Printf("Error sending metric: %+v", err)
-	}
+	defer getStatsdClient().Close()
 	fmt.Printf("Starting Runny v%v\n", VERSION)
 	//	makeConfig()
 	var settings Config = readConfig()
@@ -86,9 +94,9 @@ func main() {
 	}
 
 	http.Handle("/", router)
-
-	client.Timing("runny.startup", 1, time.Since(startupBegan))
-	err = http.ListenAndServe(":8080", nil)
+	d := time.Since(startupBegan)
+	getStatsdClient().Timing("time.startup", int64(d/time.Millisecond), 1.0)
+	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
 		log.Fatal("ListenAndServe:", err)
 	}
@@ -155,16 +163,30 @@ func nilHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "Nil Handler")
 }
 func homeHandler(w http.ResponseWriter, r *http.Request) {
-	printError("home handler")
+	startupBegan := time.Now()
 	w.Header().Add("Content-Type", "text/html")
 	fmt.Fprint(w, "Try a <a href='/Hello/world'>hello</a>.")
+	d := time.Since(startupBegan)
+	err := getStatsdClient().Inc("count.homeHandler", 1, 1.0)
+	err = getStatsdClient().Timing("time.homeHandler", int64(d/time.Millisecond), 1.0)
+	// handle any errors
+	if err != nil {
+		log.Printf("Error sending metric: %+v", err)
+	}
 }
 
 func helloHandler(w http.ResponseWriter, r *http.Request) {
-	printError("hello handler")
+	startupBegan := time.Now()
 	w.Header().Add("Content-Type", "text/html")
 	phrase := r.FormValue("salutation") + ", " + r.FormValue("name") + "!"
 	fmt.Fprint(w, phrase)
+	d := time.Since(startupBegan)
+	err := getStatsdClient().Inc("count.helloHandler", 1, 1.0)
+	err = getStatsdClient().Timing("time.helloHandler", int64(d/time.Millisecond), 1.0)
+	// handle any errors
+	if err != nil {
+		log.Printf("Error sending metric: %+v", err)
+	}
 }
 
 type Config struct {
